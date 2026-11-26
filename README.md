@@ -1,10 +1,10 @@
 # ColorOS 17 Optical FOD (Fingerprint) AIDL V3 Bridge (`tanzanite`)
 
-A standalone, zero-`libc++_shared.so` native C++ AIDL V3 Fingerprint HAL bridge that connects **Xiaomi's legacy optical under-display fingerprint HAL (`fingerprint.jiiov.so`) + Xiaomi display LHBM (`/dev/mi_display/disp_feature`) + touch FOD (`/dev/xiaomi-touch`, `fod_press_status`, `BTN_INFO`)** directly to **ColorOS 17 `IFingerprint` V3 + Oplus custom FOD transactions (`1019` / `1001`)**.
+A standalone, zero-`libc++_shared.so` native C++ AIDL V3 Fingerprint HAL bridge (`FodAidlBridge v5`) that connects **Xiaomi's legacy optical under-display fingerprint HAL (`fingerprint.jiiov.so`) + Xiaomi display LHBM (`/dev/mi_display/disp_feature`) + touch FOD (`/dev/xiaomi-touch`, `fod_press_status`, `BTN_INFO`)** directly to **ColorOS 17 `IFingerprint` V3 + Oplus custom FOD transactions (`1019` / `1001`)**.
 
 > [!IMPORTANT]
 > **Sensor Support Notice**:
-> - **Tested & confirmed working**: **Jiiov** optical FOD (`fingerprint.jiiov.so`) on Redmi Note 14 4G (`tanzanite`).
+> - **Tested & confirmed working**: **Jiiov** optical FOD (`fingerprint.jiiov.so`) on Redmi Note 14 4G (`tanzanite`) under **SELinux Enforcing**.
 > - **Untested**: **Goodix** (`fingerprint.goodix_fod.so` / `fingerprint.goodix.so`), **FPC** (`fingerprint.fpc_fod.so`), and **Silead** (`fingerprint.silead.so`). Although fallback probe paths exist in `openFingerprintHal()`, **Goodix and non-Jiiov variants have NOT been tested on hardware** — their `extCmd` / vendor acquired codes may differ from Jiiov.
 
 ---
@@ -17,7 +17,7 @@ A standalone, zero-`libc++_shared.so` native C++ AIDL V3 Fingerprint HAL bridge 
 | **SoC / ABI** | MediaTek Helio G99-Ultra (`MT6789`), `arm64-v8a`, VNDK 31 |
 | **Display** | 1080×2400 AMOLED (`panel_o7_38_0c_0a_dsc_vdo`, FOD center `(540, 2109)`, radius `93 px`) |
 | **Optical Sensor Tested** | **Jiiov (`fingerprint.jiiov.so` + MITEE TEE)** — *Goodix untested* |
-| **Kernel** | `5.10.269-EvernightKernel-Android-PERMISSIVE` |
+| **Kernel** | `5.10.251-HayaseYuuka-v3.4-MillenniumTeam+` (**SELinux Enforcing**) — also tested on `5.10.269-EvernightKernel-Android-PERMISSIVE` |
 | **Stock Firmware (Base Vendor)** | HyperOS 2 — `OS2.0.214.0.VOGEUXM` (`Redmi/tanzanite/tanzanite:12/SP1A.210812.016/OS2.0.214.0.VOGEUXM:user/release-keys`, Android 12 / SDK 31 vendor) |
 | **ColorOS Version** | ColorOS 17 (`V17.0.0`, Android 17 / SDK 37) |
 | **ColorOS Base ROM** | OnePlus Ace 5 Ultra CN (`PLC110`), `PLC110_11_A.01` (`PLC110_11.A.01_001_202610210112`, `CP2A.260605.016 release-keys`) |
@@ -48,9 +48,65 @@ A standalone, zero-`libc++_shared.so` native C++ AIDL V3 Fingerprint HAL bridge 
 
 ### Required Stock Vendor Files (Keep Unmodified from Base Vendor)
 - `/vendor/lib64/hw/fingerprint.jiiov.so` (and its MITEE/vendor dependencies)
-- Geometry properties (already present in stock `tanzanite` vendor props, read dynamically at boot):
-  - `persist.vendor.sys.fp.fod.location.X_Y` (fallback: `persist.vendor.fingerprint.optical.sensorlocation`)
-  - `persist.vendor.sys.fp.fod.size.width_height` (fallback: `persist.vendor.fingerprint.optical.iconsize`)
+- `/dev/mi_display/disp_feature` (Xiaomi display feature kernel driver supporting `MI_DISP_IOCTL_SET_LOCAL_HBM` mode `2`)
+- `/dev/xiaomi-touch` and `/sys/class/touch/touch_dev/fod_press_status` (Xiaomi touch driver supporting `TOUCH_MODE_FOD_ENABLE = 10`)
+
+---
+
+## Required Properties & ColorOS Feature XMLs (FOD Integration Guide)
+
+Having the AIDL binary alone is **not** enough for ColorOS 17 to render the FOD icon, pressed animation, and Local HBM correctly. Make sure the following properties and ColorOS feature XMLs are present in your port:
+
+### 1. Vendor Properties (`vendor/build.prop`)
+```ini
+# FOD sensor geometry (top-left X,Y and width,height in pixels for 1080x2400 panel)
+# FodAidlBridge reads these dynamically at boot and computes:
+#   centerX = X + W/2 = 447 + 93 = 540
+#   centerY = Y + H/2 = 2016 + 93 = 2109
+#   radius  = W/2     = 93
+# Adjust these two lines to match YOUR device's physical optical sensor position!
+persist.vendor.sys.fp.fod.location.X_Y=447,2016
+persist.vendor.sys.fp.fod.size.width_height=186,186
+
+# Xiaomi / MTK FOD & Local HBM flags
+ro.hardware.fp.fod=true
+ro.hardware.fp.fod.location=low
+ro.hardware.fp.fod.touch.ctl.version=2.0
+ro.vendor.localhbm.enable=true
+
+# CRITICAL: Disable software dimlayer (bridge uses hardware Local HBM 1200 nit white circle)
+ro.vendor.fod.dimlayer.enable=false
+ro.vendor.display.fod_monitor_default_fps=120
+
+# CRITICAL on MTK devices without native MTK hardware AOD: prevents SOFOD/AOD freeze
+ro.vendor.mtk_aod_support=0
+```
+*(Fallback geometry props also checked by `FodAidlBridge` if the above are absent: `persist.vendor.fingerprint.optical.sensorlocation` and `persist.vendor.fingerprint.optical.iconsize`.)*
+
+### 2. ColorOS Feature XMLs (`my_product/etc/permissions/`)
+Add/verify these in **`my_product/etc/permissions/oplus.product.display_features.xml`**:
+```xml
+<!-- Screen fingerprint feature (hardware Local HBM, disable software dimlayer) -->
+<!-- NOTE: "fingeprint" (missing 'r') is the EXACT upstream ColorOS spelling! Do NOT "fix" the typo! -->
+<oplus-feature name="oplus.software.fingeprint_optical_enabled"/>
+<oplus-feature name="oplus.software.display.fingerprint_disable_dimlayer"/>
+<oplus-feature name="oplus.software.display.local_hbm_support"/>
+<oplus-feature name="oplus.software.display.aod_support"/>
+```
+And verify **`my_product/etc/permissions/android.hardware.fingerprint.xml`** declares:
+```xml
+<permissions>
+    <feature name="android.hardware.fingerprint" />
+</permissions>
+```
+And in **`my_product/build.prop`** (usually present in stock ColorOS `my_product`):
+```ini
+persist.sys.block.fingerprint=true
+```
+
+### 3. Template Storage Directory & SELinux Context
+- `FodAidlBridge` stores ColorOS templates in **`/data/vendor_de/<userId>/fpdata_cos`** (`0770 system:system`) instead of `/data/vendor_de/0/fpdata` so dual-booting DSU ColorOS alongside host HyperOS never wipes either OS's fingerprints.
+- Under SELinux Enforcing, `/data/vendor_de/[0-9]+/fpdata_cos(/.*)?` MUST be labeled `u:object_r:vendor_fingerprint_data_file:s0` (see [`config/selinux_enforcing.cil.snippet`](config/selinux_enforcing.cil.snippet)).
 
 ---
 
@@ -104,18 +160,32 @@ flowchart TD
 5. **Acquired / Vendor Code Filtering (`halNotifyCallback`)**:
    - Filters proprietary Jiiov internal notifications (`type == 7`, acquired codes `1020, 1022, 1023, 1025`) that confuse ColorOS UI.
    - Translates Jiiov low-contrast frame `1041` to standard AIDL `INSUFFICIENT (3)`.
-   - Converts `hw_auth_token_t` (69-byte packed struct with big-endian `authenticator_type` & `timestamp`) losslessly to/from AIDL `HardwareAuthToken` (`readHardwareAuthToken` / `writeHardwareAuthToken`).
+   - Converts `hw_auth_token_t` (69-byte packed struct with big-endian `authenticator_type` & `timestamp`) losslessly to/from AIDL `HardwareAuthToken`.
+6. **Runtime Debug Log Toggle (`bridge_log.h`)**:
+   - Quiet by default (only 1-line boot banner and `ALOGE` errors logged). Toggle live without rebooting:
+     ```bash
+     adb shell setprop persist.vendor.cos.bridge.debug 1   # enable verbose logs
+     adb shell setprop persist.vendor.cos.bridge.debug 0   # silence verbose logs
+     ```
+
+---
+
+## SELinux Enforcing Policy
+
+See [`config/selinux_enforcing.cil.snippet`](config/selinux_enforcing.cil.snippet) for the audited Android 17 / VNDK 31 CIL rules for `hal_fingerprint_default` (`touchfeature_device`, `input_device_31_0`, `vendor_displayfeature_device`, `vendor_sysfs_displayfeature`, `vendor_fingerprint_data_file`, `servicemanager_31_0`, and binder client pairs).
 
 ---
 
 ## Installation (Vendor Overlay)
 
-1. Copy the files from `vendor/` (or the `v1.0.0` release archive) into your port's vendor tree:
+1. Copy the files from `vendor/` (or the `v1.1.0` release archive) into your port's vendor tree:
    - `vendor/bin/hw/android.hardware.biometrics.fingerprint-service.tanzanite`
    - `vendor/etc/init/android.hardware.biometrics.fingerprint@2.1-service.rc`
    - `vendor/etc/vintf/manifest/android.hardware.biometrics.fingerprint@2.1-service.xml`
 2. Add the entries from [`config/vendor_fs_config.snippet`](config/vendor_fs_config.snippet) and [`config/vendor_file_contexts.snippet`](config/vendor_file_contexts.snippet).
-3. Repack `vendor.img`.
+3. Add the required properties & ColorOS feature XMLs listed above.
+4. If running **SELinux Enforcing**, merge [`config/selinux_enforcing.cil.snippet`](config/selinux_enforcing.cil.snippet) into your vendor SELinux policy (and recompile `precompiled_sepolicy`).
+5. Repack `vendor.img`.
 
 ---
 
@@ -137,8 +207,32 @@ Zero `libc++_shared.so` dependency (`-static-libstdc++`).
 adb push vendor/bin/hw/android.hardware.biometrics.fingerprint-service.tanzanite /data/local/tmp/fod_test
 adb shell 'chmod 755 /data/local/tmp/fod_test && /data/local/tmp/fod_test --self-test'
 # Expected: exit code 0, ver=3, type=3 (UNDER_DISPLAY_OPTICAL), cmd 1010 -> -1, tx 1001 cmdId=1201 OK
-adb logcat -d -s FodAidlBridge
+
+adb shell service check android.hardware.biometrics.fingerprint.IFingerprint/default
+adb shell dumpsys fingerprint
 ```
+
+---
+
+## Troubleshooting Guide
+
+First, enable live verbose logging:
+```bash
+adb shell setprop persist.vendor.cos.bridge.debug 1
+adb logcat -s FodAidlBridge FingerprintService OnScreenFingerprint
+```
+
+| Symptom | Likely Cause | How to Check & Fix |
+| :--- | :--- | :--- |
+| **No Fingerprint menu in Settings** | Service not registered, VINTF manifest mismatch, or missing `android.hardware.fingerprint` feature | Run `adb shell service check android.hardware.biometrics.fingerprint.IFingerprint/default`. If `not found`, check `logcat -d \| grep -iE 'FodAidlBridge\|fps_hal\|avc:.*fingerprint'`. Also verify `android.hardware.fingerprint.xml` is in `my_product/etc/permissions/`. |
+| **FOD icon or pressed animation does not appear** | Missing `oplus.software.fingeprint_optical_enabled` (check exact spelling without `r`!) or `IFingerprint::getSensorProps` not reporting `UNDER_DISPLAY_OPTICAL (3)` | Run `adb shell pm list features \| grep fingeprint` and `adb shell dumpsys fingerprint \| grep -iE 'type\|location\|radius'`. Verify `FodAidlBridge` logs `onFingerprintCmd(1001, cmdId=1201)` on touch-down and `1202` on touch-up. |
+| **FOD icon is off-center / misaligned with sensor** | Wrong `persist.vendor.sys.fp.fod.location.X_Y` or `size.width_height` for your panel | Check `adb shell getprop \| grep fp.fod`. Remember `X_Y` is **top-left**, NOT center: `X = centerX - W/2`, `Y = centerY - H/2`. Verify computed `(cx, cy, r)` in `dumpsys fingerprint`. |
+| **Whole screen dims/blacks out or flickers when pressing FOD** | ColorOS software dimlayer is still enabled alongside hardware Local HBM | Verify `oplus.software.display.fingerprint_disable_dimlayer` and `oplus.software.display.local_hbm_support` are in `oplus.product.display_features.xml`, AND `ro.vendor.fod.dimlayer.enable=false` + `ro.vendor.localhbm.enable=true` in `vendor/build.prop`. |
+| **Finger pressed on icon, animation plays, but sensor never reads / green dot appears** | LHBM ioctl failed (`/dev/mi_display/disp_feature` permission/SELinux) or wrong LHBM mode (`4` green vs `2` white 1200 nit), or non-Jiiov sensor `extCmd` mismatch | Check `FodAidlBridge` log for `MI_DISP_IOCTL_SET_LOCAL_HBM` and `MI_DISP_EVENT_FOD` / `UI_READY`. If `open(/dev/mi_display/disp_feature)` fails with `EACCES`, check `vendor_displayfeature_device` SELinux rule (`logcat -d \| grep avc:.*disp_feature`). |
+| **Touching FOD circle produces zero logs in `FodAidlBridge`** | Touch FOD mode (`TOUCH_MODE_FOD_ENABLE=10`) failed on `/dev/xiaomi-touch` or SELinux blocked `touchfeature_device` / `input_device` | Check `FodAidlBridge` logs for `open(/dev/xiaomi-touch)` and `fod_press_status` / `BTN_INFO`. Verify `hal_fingerprint_default` has `touchfeature_device` and `input_device_31_0` rules under SELinux Enforcing. |
+| **Screen-Off FOD (SOFOD) freezes or doesn't wake** | `ro.vendor.mtk_aod_support` is not `0` on MTK panels without hardware AOD, or DT2W conflict | Set `ro.vendor.mtk_aod_support=0` in `vendor/build.prop`. For smooth DT2W + SOFOD coexistence, pair with [`coloros-dt2w-aidl-bridge`](https://github.com/DwiPrdn/coloros-dt2w-aidl-bridge) and [`coloros-r2w-aidl-bridge`](https://github.com/DwiPrdn/coloros-r2w-aidl-bridge). |
+| **Enrolled fingerprints vanish after reboot** | `/data/vendor_de/0/fpdata_cos` creation/write failed under SELinux Enforcing or wrong ownership | Check `adb shell ls -ldZ /data/vendor_de/0/fpdata_cos` (must be `0770 system:system` and `u:object_r:vendor_fingerprint_data_file:s0`) and check `logcat -d \| grep avc:.*fpdata_cos`. |
+| **SELinux Enforcing audit** | Missing CIL allow rule in `vendor_sepolicy.cil` / stale `precompiled_sepolicy` | Run `adb logcat -d \| grep -E "avc:.*hal_fingerprint_default"`. Remember Android `init` fast-loads `vendor/etc/selinux/precompiled_sepolicy` whenever `.sha256` files match — always recompile `precompiled_sepolicy` with `secilc` after editing `vendor_sepolicy.cil`! |
 
 ---
 

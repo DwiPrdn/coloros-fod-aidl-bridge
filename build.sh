@@ -14,7 +14,7 @@ mkdir -p "$(dirname "$OUT")"
 
 "$CXX" -O2 -std=c++17 -Wall -Wextra -fPIE -pie -static-libstdc++ \
   -Wl,--allow-shlib-undefined \
-  src/fod_bridge.cpp "$BINDER_NDK" -llog -ldl \
+  -Isrc src/fod_bridge.cpp "$BINDER_NDK" -llog -ldl -pthread \
   -o "$OUT"
 
 "$STRIP" --strip-unneeded "$OUT"

@@ -31,9 +31,7 @@
 #include <vector>
 
 #define LOG_TAG "FodAidlBridge"
-#define ALOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-#define ALOGW(...) __android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
-#define ALOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#include "bridge_log.h"
 
 // Platform LL-NDK libbinder_ndk symbols
 extern "C" {
@@ -487,21 +485,6 @@ static void postCallback(std::function<void()> fn) {
         gCbQueue.push_back(std::move(fn));
     }
     gCbQueueCv.notify_one();
-}
-
-static void flushCallbackQueueForTest() {
-    std::mutex m;
-    std::condition_variable cv;
-    bool done = false;
-    postCallback([&]() {
-        {
-            std::lock_guard<std::mutex> lk(m);
-            done = true;
-        }
-        cv.notify_one();
-    });
-    std::unique_lock<std::mutex> lk(m);
-    cv.wait_for(lk, std::chrono::seconds(2), [&]() { return done; });
 }
 
 // UI-ready fallback waiter
@@ -1909,7 +1892,6 @@ static bool openFingerprintHal() {
 static int runSelfTest() {
     printf("[FodAidlBridge v5] Running self-test...\n");
     loadFodGeometryFromProps();
-    startCallbackWorker();
     printf("  geometry: center=(%d,%d) radius=%d\n", gFodCenterX, gFodCenterY, gFodRadius);
 
     gFpClass = AIBinder_Class_define(kIFingerprintDescriptor, onCreateFp, onDestroyFp, onTransactFp);
@@ -2032,7 +2014,8 @@ int main(int argc, char** argv) {
         return runSelfTest();
     }
 
-    ALOGI("FodAidlBridge v5 starting (Xiaomi Optical FOD -> ColorOS 17 AIDL V3, isolated fpdata_cos + async cb)...");
+    BRIDGE_LOG_BOOT("FodAidlBridge v5 starting (Xiaomi Optical FOD -> ColorOS 17 AIDL V3, debug prop=%s)...",
+                    cos_bridge_log::kDebugPropName);
     loadFodGeometryFromProps();
     startCallbackWorker();
 
@@ -2058,7 +2041,7 @@ int main(int argc, char** argv) {
         ALOGE("AServiceManager_addService(%s) failed: %d", kIFingerprintInstance, status);
         return 1;
     }
-    ALOGI("Registered %s successfully! Joining thread pool...", kIFingerprintInstance);
+    BRIDGE_LOG_BOOT("Registered %s (vendor=%s) successfully!", kIFingerprintInstance, gSensorVendor.c_str());
 
     ABinderProcess_joinThreadPool();
     ALOGE("ABinderProcess_joinThreadPool() exited unexpectedly!");

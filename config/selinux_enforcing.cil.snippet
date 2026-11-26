@@ -1,0 +1,36 @@
+; Audited SELinux Enforcing CIL snippet for FodAidlBridge v5 (VNDK 31 vendor -> Android 17 plat)
+; Runs inside native `hal_fingerprint_default` domain.
+; File contexts in vendor_file_contexts:
+;   /(vendor|system/vendor)/bin/hw/android\.hardware\.biometrics\.fingerprint-service\.tanzanite  u:object_r:hal_fingerprint_default_exec:s0
+;   /dev/disp_feature                                                                             u:object_r:vendor_displayfeature_device:s0
+;   /data/vendor_de/[0-9]+/fpdata_cos(/.*)?                                                       u:object_r:vendor_fingerprint_data_file:s0
+
+(allow hal_fingerprint_default touchfeature_device (chr_file (ioctl read write getattr lock append map open)))
+(allow hal_fingerprint_default input_device_31_0 (dir (ioctl read getattr lock open search)))
+(allow hal_fingerprint_default input_device_31_0 (chr_file (ioctl read getattr lock open)))
+(allow hal_fingerprint_default vendor_displayfeature_device (chr_file (ioctl read write getattr lock append map open)))
+(allow hal_fingerprint_default vendor_sysfs_displayfeature (dir (ioctl read getattr lock open search)))
+(allow hal_fingerprint_default vendor_sysfs_displayfeature (file (ioctl read write getattr lock append map open)))
+(allow hal_fingerprint_default sysfs_31_0 (dir (ioctl read getattr lock open search)))
+(allow hal_fingerprint_default sysfs_31_0 (file (ioctl read write getattr lock append map open)))
+(allow hal_fingerprint_default hal_displayfeature_xiaomi_hwservice (hwservice_manager (find)))
+(allow hal_fingerprint_default hal_displayfeature_xiaomi_default (binder (call transfer)))
+(allow hal_displayfeature_xiaomi_default hal_fingerprint_default (binder (call transfer)))
+(allow hal_fingerprint_default hal_displayfeature_xiaomi_default (fd (use)))
+(allow hal_displayfeature_xiaomi_default hal_fingerprint_default (fd (use)))
+(allow hal_fingerprint_default vendor_fingerprint_data_file (dir (ioctl read write create getattr setattr lock rename open add_name remove_name reparent search rmdir)))
+(allow hal_fingerprint_default vendor_fingerprint_data_file (file (ioctl read write create getattr setattr lock append map unlink rename open)))
+(allow hal_fingerprint_default vendor_default_prop_31_0 (property_service (set)))
+(allow hal_fingerprint_default servicemanager_31_0 (binder (call transfer)))
+(allow servicemanager_31_0 hal_fingerprint_default (binder (call transfer)))
+(allow servicemanager_31_0 hal_fingerprint_default (dir (search)))
+(allow servicemanager_31_0 hal_fingerprint_default (file (read open)))
+(allow servicemanager_31_0 hal_fingerprint_default (process (getattr)))
+(allow system_server_31_0 hal_fingerprint_default (binder (call transfer)))
+(allow hal_fingerprint_default system_server_31_0 (binder (call transfer)))
+(allow platform_app_31_0 hal_fingerprint_default (binder (call transfer)))
+(allow hal_fingerprint_default platform_app_31_0 (binder (call transfer)))
+(allow system_app_31_0 hal_fingerprint_default (binder (call transfer)))
+(allow hal_fingerprint_default system_app_31_0 (binder (call transfer)))
+(allow priv_app_31_0 hal_fingerprint_default (binder (call transfer)))
+(allow hal_fingerprint_default priv_app_31_0 (binder (call transfer)))
