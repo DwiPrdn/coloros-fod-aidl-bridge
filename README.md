@@ -1,11 +1,11 @@
 # ColorOS 17 Optical FOD (Fingerprint) AIDL V3 Bridge (`tanzanite`)
 
-A standalone, zero-`libc++_shared.so` native C++ AIDL V3 Fingerprint HAL bridge (`FodAidlBridge v5`) that connects **Xiaomi's legacy optical under-display fingerprint HAL (`fingerprint.jiiov.so`) + Xiaomi display LHBM (`/dev/mi_display/disp_feature`) + touch FOD (`/dev/xiaomi-touch`, `fod_press_status`, `BTN_INFO`)** directly to **ColorOS 17 `IFingerprint` V3 + Oplus custom FOD transactions (`1019` / `1001`)**.
+A standalone, zero-`libc++_shared.so` native C++ AIDL V3 Fingerprint HAL bridge (`FodAidlBridge v5`) that connects **Xiaomi's legacy optical under-display fingerprint HAL (`fingerprint.jiiov.so` / `fingerprint.goodix_fod.so`) + Xiaomi display LHBM (`/dev/mi_display/disp_feature`) + touch FOD (`/dev/xiaomi-touch`, `fod_press_status`, `BTN_INFO`)** directly to **ColorOS 17 `IFingerprint` V3 + Oplus custom FOD transactions (`1019` / `1001`)**.
 
 > [!IMPORTANT]
 > **Sensor Support Notice**:
-> - **Tested & confirmed working**: **Jiiov** optical FOD (`fingerprint.jiiov.so`) on Redmi Note 14 4G (`tanzanite`) under **SELinux Enforcing**.
-> - **Untested**: **Goodix** (`fingerprint.goodix_fod.so` / `fingerprint.goodix.so`), **FPC** (`fingerprint.fpc_fod.so`), and **Silead** (`fingerprint.silead.so`). Although fallback probe paths exist in `openFingerprintHal()`, **Goodix and non-Jiiov variants have NOT been tested on hardware** — their `extCmd` / vendor acquired codes may differ from Jiiov.
+> - **Tested & confirmed working**: **Jiiov** (`fingerprint.jiiov.so`) and **Goodix** (`fingerprint.goodix_fod.so`) optical FOD sensors on Redmi Note 14 4G (`tanzanite`) under **SELinux Enforcing**.
+> - **Untested**: **FPC** (`fingerprint.fpc_fod.so`) and **Silead** (`fingerprint.silead.so`). Fallback probe paths exist in `openFingerprintHal()`, but FPC/Silead variants have not been tested on hardware — their `extCmd` / vendor acquired codes may differ.
 
 ---
 
@@ -16,7 +16,7 @@ A standalone, zero-`libc++_shared.so` native C++ AIDL V3 Fingerprint HAL bridge 
 | **Test Device** | Redmi Note 14 4G (`tanzanite`, SKU `tanzanite_n_gl`) |
 | **SoC / ABI** | MediaTek Helio G99-Ultra (`MT6789`), `arm64-v8a`, VNDK 31 |
 | **Display** | 1080×2400 AMOLED (`panel_o7_38_0c_0a_dsc_vdo`, FOD center `(540, 2109)`, radius `93 px`) |
-| **Optical Sensor Tested** | **Jiiov (`fingerprint.jiiov.so` + MITEE TEE)** — *Goodix untested* |
+| **Optical Sensors Tested** | **Jiiov (`fingerprint.jiiov.so`) & Goodix (`fingerprint.goodix_fod.so`) + MITEE TEE** |
 | **Kernel** | `5.10.251-HayaseYuuka-v3.4-MillenniumTeam+` (**SELinux Enforcing**) — also tested on `5.10.269-EvernightKernel-Android-PERMISSIVE` |
 | **Stock Firmware (Base Vendor)** | HyperOS 2 — `OS2.0.214.0.VOGEUXM` (`Redmi/tanzanite/tanzanite:12/SP1A.210812.016/OS2.0.214.0.VOGEUXM:user/release-keys`, Android 12 / SDK 31 vendor) |
 | **ColorOS Version** | ColorOS 17 (`V17.0.0`, Android 17 / SDK 37) |
@@ -31,7 +31,7 @@ A standalone, zero-`libc++_shared.so` native C++ AIDL V3 Fingerprint HAL bridge 
 | :--- | :--- |
 | **Exposed Service** | `android.hardware.biometrics.fingerprint.IFingerprint/default` (Stable AIDL V3, hash `637371b53fb7faf9bd43aa51b72c23852d6e6d96`, `UNDER_DISPLAY_OPTICAL`) |
 | **ColorOS Custom Binder Protocol** | Inbound `IFingerprint::sendFingerprintCmd` (tx `1019`: `1010` enroll total steps, `1011` screen state)<br>Outbound `ISessionCallback::onFingerprintCmd` (tx `1001`: `1201` touch-down + uptimeMillis, `1202` touch-up) |
-| **Legacy Vendor HAL Backend** | `dlopen("/vendor/lib64/hw/fingerprint.jiiov.so")` (tested on Jiiov; fallback probes for `goodix_fod`/`goodix`/`fpc_fod`/`silead` are untested) via `fingerprint_device_t` + Xiaomi `extCmd()` |
+| **Legacy Vendor HAL Backend** | Auto-probed via `dlopen()`: `fingerprint.jiiov.so` & `fingerprint.goodix_fod.so` (**tested & working**); fallback probes for `goodix`/`fpc_fod`/`silead` (untested) via `fingerprint_device_t` + Xiaomi `extCmd()` |
 | **Display Illumination (LHBM)** | `/dev/mi_display/disp_feature` — `MI_DISP_IOCTL_SET_LOCAL_HBM` (`0x400c440e`, mode `2 = LOCAL_HBM_NORMAL_WHITE_1200NIT`) & `MI_DISP_IOCTL_REGISTER_EVENT` (`0x400c4407`, `MI_DISP_EVENT_FOD = 2`) |
 | **Touch FOD Hardware** | `/dev/xiaomi-touch` (`0x5400`, `TOUCH_MODE_FOD_ENABLE = 10`), `/sys/class/touch/touch_dev/fod_press_status` (`POLLPRI`), and `/dev/input/event*` (`BTN_INFO = 0x152` + `ABS_MT_POSITION_{X,Y}`) |
 | **Replaces Stock Binary** | `/vendor/bin/hw/android.hardware.biometrics.fingerprint@2.1-service` (HIDL 2.1, incompatible with ColorOS 17 AIDL V3 + Oplus FOD UI pipeline) |
@@ -47,7 +47,7 @@ A standalone, zero-`libc++_shared.so` native C++ AIDL V3 Fingerprint HAL bridge 
 | `vendor/etc/vintf/manifest/android.hardware.biometrics.fingerprint@2.1-service.xml` | **Replaced** | `0644` (`0:0`) | `u:object_r:vendor_configs_file:s0` |
 
 ### Required Stock Vendor Files (Keep Unmodified from Base Vendor)
-- `/vendor/lib64/hw/fingerprint.jiiov.so` (and its MITEE/vendor dependencies)
+- `/vendor/lib64/hw/fingerprint.jiiov.so` and/or `/vendor/lib64/hw/fingerprint.goodix_fod.so` (and their MITEE/vendor dependencies)
 - `/dev/mi_display/disp_feature` (Xiaomi display feature kernel driver supporting `MI_DISP_IOCTL_SET_LOCAL_HBM` mode `2`)
 - `/dev/xiaomi-touch` and `/sys/class/touch/touch_dev/fod_press_status` (Xiaomi touch driver supporting `TOUCH_MODE_FOD_ENABLE = 10`)
 
@@ -114,7 +114,7 @@ persist.sys.block.fingerprint=true
 
 ### Why Stock Xiaomi Fingerprint HAL Breaks on ColorOS 17
 1. **HIDL 2.1 vs AIDL V3**: ColorOS 17 expects `android.hardware.biometrics.fingerprint.IFingerprint/default` V3 (`UNDER_DISPLAY_OPTICAL`, `SensorLocation`, `TouchDetectionParameters`) and does not work properly with Xiaomi's legacy HIDL 2.1 daemon.
-2. **Xiaomi Optical FOD Sequence**: Xiaomi's Jiiov optical sensor (`fingerprint.jiiov.so`) will **not** capture a valid fingerprint image unless:
+2. **Xiaomi Optical FOD Sequence**: Xiaomi's optical sensors (`fingerprint.jiiov.so` / `fingerprint.goodix_fod.so`) will **not** capture a valid fingerprint image unless:
    - `/dev/xiaomi-touch` has `TOUCH_MODE_FOD_ENABLE (10)` enabled,
    - Local HBM is turned ON via `/dev/mi_display/disp_feature` (`mode = 2` = `LOCAL_HBM_NORMAL_WHITE_1200NIT`; mode `4` is green 500 nit factory test and blinds the sensor!),
    - `extCmd(1, 1)` (finger down), `extCmd(2, x)` / `extCmd(3, y)`, and `extCmd(10, 1)` (`UI_READY` once `MI_DISP_EVENT_FOD` fires) are delivered in exact order.
@@ -130,7 +130,7 @@ flowchart TD
     SYS <-->|"IFingerprint V3 + ISession (tx 1..22) + tx 1019<br/>ISessionCallback (tx 1..16) + tx 1001 (1201/1202)"| BRIDGE["FodAidlBridge v5<br/>(android.hardware.biometrics.fingerprint-service.tanzanite)"]
 
     BRIDGE -->|"FIFO Async Callback Worker Thread"| SYS
-    BRIDGE -->|"dlopen + fingerprint_device_t<br/>extCmd(1=touch, 2/3=XY, 10=UI_READY)<br/>store: /data/vendor_de/0/fpdata_cos"| JIIOV["fingerprint.jiiov.so<br/>(Tested: Jiiov / MITEE TEE)<br/>(Goodix untested)"]
+    BRIDGE -->|"dlopen + fingerprint_device_t<br/>extCmd(1=touch, 2/3=XY, 10=UI_READY)<br/>store: /data/vendor_de/0/fpdata_cos"| JIIOV["fingerprint.jiiov.so / fingerprint.goodix_fod.so<br/>(Tested: Jiiov & Goodix / MITEE TEE)"]
 
     TOUCH["TouchMonitorThread<br/>POLLPRI fod_press_status + /dev/input/event* BTN_INFO"] -->|"FOD Down/Up + (x,y)"| BRIDGE
     DISP["DisplayMonitorThread<br/>MI_DISP_IOCTL_REGISTER_EVENT (FOD=2)"] -->|"MI_DISP_EVENT_FOD != 0 -> UI_READY"| BRIDGE
@@ -153,7 +153,7 @@ flowchart TD
      1. Immediately sends ColorOS `onFingerprintCmd(1001, cmdId=1201, uptimeMillis)` so the pressed glow and screen-off wake pipeline start with zero latency.
      2. Sends touch `(x, y)` via `extCmd(2, x)` / `extCmd(3, y)`.
      3. Enables Local HBM (`MI_DISP_IOCTL_SET_LOCAL_HBM`, `value = 2` white 1200 nit).
-     4. Signals `extCmd(1, 1)` (finger down) to `fingerprint.jiiov.so`.
+     4. Signals `extCmd(1, 1)` (finger down) to the loaded optical HAL (`fingerprint.jiiov.so` / `fingerprint.goodix_fod.so`).
      5. Waits for `DisplayMonitorThread` to receive `MI_DISP_EVENT_FOD != 0` (typically ~16–32 ms), then immediately fires `extCmd(10, 1)` (`UI_READY`). A fallback timer (`80 ms` screen-on, `350 ms` screen-off) guarantees capture never stalls.
    - **Post-Capture / Finger Up**:
      - Immediately turns off `extCmd(10, 0)`, Local HBM (`value = 0`), and sends `cmdId=1202` (touch-up) so the white circle never lingers after enrollment steps or failed matches.
@@ -228,7 +228,7 @@ adb logcat -s FodAidlBridge FingerprintService OnScreenFingerprint
 | **FOD icon or pressed animation does not appear** | Missing `oplus.software.fingeprint_optical_enabled` (check exact spelling without `r`!) or `IFingerprint::getSensorProps` not reporting `UNDER_DISPLAY_OPTICAL (3)` | Run `adb shell pm list features \| grep fingeprint` and `adb shell dumpsys fingerprint \| grep -iE 'type\|location\|radius'`. Verify `FodAidlBridge` logs `onFingerprintCmd(1001, cmdId=1201)` on touch-down and `1202` on touch-up. |
 | **FOD icon is off-center / misaligned with sensor** | Wrong `persist.vendor.sys.fp.fod.location.X_Y` or `size.width_height` for your panel | Check `adb shell getprop \| grep fp.fod`. Remember `X_Y` is **top-left**, NOT center: `X = centerX - W/2`, `Y = centerY - H/2`. Verify computed `(cx, cy, r)` in `dumpsys fingerprint`. |
 | **Whole screen dims/blacks out or flickers when pressing FOD** | ColorOS software dimlayer is still enabled alongside hardware Local HBM | Verify `oplus.software.display.fingerprint_disable_dimlayer` and `oplus.software.display.local_hbm_support` are in `oplus.product.display_features.xml`, AND `ro.vendor.fod.dimlayer.enable=false` + `ro.vendor.localhbm.enable=true` in `vendor/build.prop`. |
-| **Finger pressed on icon, animation plays, but sensor never reads / green dot appears** | LHBM ioctl failed (`/dev/mi_display/disp_feature` permission/SELinux) or wrong LHBM mode (`4` green vs `2` white 1200 nit), or non-Jiiov sensor `extCmd` mismatch | Check `FodAidlBridge` log for `MI_DISP_IOCTL_SET_LOCAL_HBM` and `MI_DISP_EVENT_FOD` / `UI_READY`. If `open(/dev/mi_display/disp_feature)` fails with `EACCES`, check `vendor_displayfeature_device` SELinux rule (`logcat -d \| grep avc:.*disp_feature`). |
+| **Finger pressed on icon, animation plays, but sensor never reads / green dot appears** | LHBM ioctl failed (`/dev/mi_display/disp_feature` permission/SELinux), wrong LHBM mode (`4` green vs `2` white 1200 nit), or untested sensor `extCmd` mismatch | Check `FodAidlBridge` log for `MI_DISP_IOCTL_SET_LOCAL_HBM` and `MI_DISP_EVENT_FOD` / `UI_READY`. If `open(/dev/mi_display/disp_feature)` fails with `EACCES`, check `vendor_displayfeature_device` SELinux rule (`logcat -d \| grep avc:.*disp_feature`). |
 | **Touching FOD circle produces zero logs in `FodAidlBridge`** | Touch FOD mode (`TOUCH_MODE_FOD_ENABLE=10`) failed on `/dev/xiaomi-touch` or SELinux blocked `touchfeature_device` / `input_device` | Check `FodAidlBridge` logs for `open(/dev/xiaomi-touch)` and `fod_press_status` / `BTN_INFO`. Verify `hal_fingerprint_default` has `touchfeature_device` and `input_device_31_0` rules under SELinux Enforcing. |
 | **Screen-Off FOD (SOFOD) freezes or doesn't wake** | `ro.vendor.mtk_aod_support` is not `0` on MTK panels without hardware AOD, or DT2W conflict | Set `ro.vendor.mtk_aod_support=0` in `vendor/build.prop`. For smooth DT2W + SOFOD coexistence, pair with [`coloros-dt2w-aidl-bridge`](https://github.com/DwiPrdn/coloros-dt2w-aidl-bridge) and [`coloros-r2w-aidl-bridge`](https://github.com/DwiPrdn/coloros-r2w-aidl-bridge). |
 | **Enrolled fingerprints vanish after reboot** | `/data/vendor_de/0/fpdata_cos` creation/write failed under SELinux Enforcing or wrong ownership | Check `adb shell ls -ldZ /data/vendor_de/0/fpdata_cos` (must be `0770 system:system` and `u:object_r:vendor_fingerprint_data_file:s0`) and check `logcat -d \| grep avc:.*fpdata_cos`. |
